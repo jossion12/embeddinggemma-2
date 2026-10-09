@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>语义图片搜索 · EmbeddingGemma 2</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --card-hover: #222636;
+    --text: #e8eaf2;
+    --muted: #8b90a3;
+    --accent: #6c8cff;
+    --accent2: #9a6cff;
+  }
+  body {
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 48px 24px 24px;
+    text-align: center;
+    background:
+      radial-gradient(ellipse 60% 80% at 20% 0%, rgba(108,140,255,.18), transparent),
+      radial-gradient(ellipse 60% 80% at 80% 0%, rgba(154,108,255,.15), transparent);
+  }
+  header h1 { font-size: 28px; font-weight: 700; letter-spacing: .5px; }
+  header h1 .grad {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header p { color: var(--muted); margin-top: 8px; font-size: 14px; }
+  #stats { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+  .search-wrap { max-width: 720px; margin: 24px auto 0; padding: 0 20px; }
+  .search-box {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card); border: 1px solid #2a2e3f;
+    border-radius: 16px; padding: 6px 8px 6px 20px;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .search-box:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(108,140,255,.15);
+  }
+  .search-box input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--text); font-size: 16px; padding: 10px 0;
+  }
+  .search-box button {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    color: #fff; border: none; border-radius: 12px;
+    padding: 10px 22px; font-size: 15px; cursor: pointer; font-weight: 600;
+  }
+  .search-box button:disabled { opacity: .5; cursor: wait; }
+
+  /* 集合（收录目录）选择栏 */
+  .col-bar {
+    display: flex; align-items: center; gap: 10px; margin-top: 14px;
+  }
+  .col-bar select {
+    flex: 1; background: var(--card); border: 1px solid #2a2e3f; color: var(--text);
+    border-radius: 12px; padding: 9px 12px; font-size: 14px; outline: none;
+  }
+  .col-bar select:focus { border-color: var(--accent); }
+  .col-bar button {
+    background: #2a2e3f; border: none; color: var(--text); border-radius: 12px;
+    padding: 9px 16px; font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .col-bar button:hover { border-color: var(--accent); color: #fff; }
+  .col-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .col-hint code { background: #2a2e3f; border-radius: 4px; padding: 1px 5px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; justify-content: center; }
+  .chip {
+    background: var(--card); border: 1px solid #2a2e3f; color: var(--muted);
+    border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+    transition: all .15s;
+  }
+  .chip:hover { color: var(--text); border-color: var(--accent); }
+
+  /* 以图搜图上传区 */
+  .drop-zone {
+    margin-top: 14px; border: 2px dashed #2a2e3f; border-radius: 16px;
+    padding: 22px; text-align: center; color: var(--muted); font-size: 14px;
+    cursor: pointer; transition: all .2s;
+  }
+  .drop-zone:hover, .drop-zone.over {
+    border-color: var(--accent); color: var(--text);
+    background: rgba(108,140,255,.06);
+  }
+  .drop-zone .icon { font-size: 26px; margin-bottom: 6px; }
+  .query-image-wrap {
+    margin-top: 14px; display: none; align-items: center; gap: 14px;
+    background: var(--card); border: 1px solid #2a2e3f; border-radius: 16px; padding: 12px 16px;
+  }
+  .query-image-wrap.show { display: flex; }
+  .query-image-wrap img {
+    width: 72px; height: 72px; object-fit: cover; border-radius: 10px;
+  }
+  .query-image-wrap .tip { flex: 1; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .query-image-wrap .clear {
+    background: #2a2e3f; border: none; color: var(--text); width: 30px; height: 30px;
+    border-radius: 50%; cursor: pointer; font-size: 15px; flex-shrink: 0;
+  }
+
+  .meta {
+    max-width: 1200px; margin: 20px auto 0; padding: 0 24px;
+    color: var(--muted); font-size: 13px; min-height: 20px;
+  }
+  .grid {
+    max-width: 1200px; margin: 12px auto 48px; padding: 0 24px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    background: var(--card); border: 1px solid #232738;
+    border-radius: 14px; overflow: hidden; cursor: zoom-in;
+    transition: transform .15s, background .15s;
+    animation: fadein .35s ease both;
+  }
+  .card:hover { transform: translateY(-3px); background: var(--card-hover); }
+  .card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #111; }
+  .card .info { padding: 8px 10px 10px; }
+  .card .label { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .bar { height: 4px; background: #2a2e3f; border-radius: 2px; margin-top: 7px; overflow: hidden; }
+  .card .bar i {
+    display: block; height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+  }
+  .card .score { font-size: 11px; color: var(--muted); margin-top: 5px; }
+  .doc-thumb {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 52px; background: linear-gradient(135deg, #1d2233, #171a26);
+  }
+  .snip {
+    font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .empty { text-align: center; color: var(--muted); padding: 60px 0; grid-column: 1 / -1; }
+
+  /* 概念标签 */
+  .labels-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .labels-bar:empty { display: none; }
+  .lchip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(108,140,255,.12); border: 1px solid rgba(108,140,255,.4);
+    color: #cdd7ff; border-radius: 999px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+  }
+  .lchip:hover { border-color: var(--accent); color: #fff; }
+  .lchip b { font-weight: 600; }
+  .lchip .del { opacity: .55; cursor: pointer; padding: 0 2px; }
+  .lchip .del:hover { opacity: 1; color: #ff7b7b; }
+  .tag-btn {
+    margin-top: 6px; width: 100%; background: #2a2e3f; border: none; color: #cdd7ff;
+    border-radius: 8px; padding: 5px 0; font-size: 12px; cursor: pointer;
+  }
+  .tag-btn:hover { background: #343a52; color: #fff; }
+  .lb-badge {
+    display: inline-block; margin-top: 4px; font-size: 11px; color: #cdd7ff;
+    background: rgba(108,140,255,.15); border-radius: 6px; padding: 2px 6px;
+  }
+
+  /* 大图预览 */
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(0,0,0,.85);
+    display: none; align-items: center; justify-content: center; z-index: 99;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 88vw; max-height: 86vh; border-radius: 10px; }
+  .lightbox .cap {
+    position: absolute; bottom: 26px; left: 0; right: 0; text-align: center;
+    color: #fff; font-size: 15px;
+  }
+
+  @keyframes fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="grad">多模态语义搜索</span></h1>
+  <p>收录任意目录，文档、图片、音频、视频自动建索引并持续同步 · Powered by EmbeddingGemma 2</p>
+  <div id="stats">正在加载模型…</div>
+</header>
+
+<div class="search-wrap">
+  <div class="search-box">
+    <input id="q" type="text" placeholder="描述你要找的内容，例如：一份关于量子计算的笔记、狗叫的录音…" autofocus>
+    <button id="btn" onclick="doSearch()">搜索</button>
+  </div>
+  <div class="col-bar">
+    <select id="colSel" onchange="doSearch(); loadLabels();"><option value="">全部集合</option></select>
+    <button onclick="addCollection()">＋ 收录目录</button>
+  </div>
+  <div class="col-hint" id="colHint">选择要搜索的目录范围；收录后目录内文件变动会自动更新索引</div>
+  <div class="labels-bar" id="labelsBar"></div>
+  <div class="chips" id="chips"></div>
+
+  <div class="drop-zone" id="dropZone">
+    <div class="icon">🖼️ 🎵 🎬</div>
+    拖拽图片 / 音频 / 视频到这里，或点击选择文件，进行<span style="color:var(--accent)">跨模态搜索</span>
+    <input id="fileInput" type="file" accept="image/*,audio/*,video/*" hidden>
+  </div>
+  <div class="query-image-wrap" id="queryImageWrap">
+    <img id="queryThumb" src="" alt="查询媒体">
+    <div id="queryThumbAv" style="display:none;font-size:38px;flex-shrink:0;">🎵</div>
+    <div class="tip" id="queryTip">将以这张图进行跨模态相似搜索<br>点击右侧 × 清除，恢复文字搜索</div>
+    <button class="clear" onclick="clearQueryMedia()" title="清除">×</button>
+  </div>
+</div>
+
+<div class="meta" id="meta"></div>
+<div class="grid" id="grid"></div>
+
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('open')">
+  <img id="lb-img" src="">
+  <div class="cap" id="lb-cap"></div>
+</div>
+
+<script>
+const EXAMPLES = ["熊猫", "海洋生物", "会飞的动物", "凶猛的捕食者", "长脖子的动物", "雪地里的动物", "猴子", "小型宠物狗"];
+
+const chipsEl = document.getElementById('chips');
+EXAMPLES.forEach(t => {
+  const c = document.createElement('span');
+  c.className = 'chip'; c.textContent = t;
+  c.onclick = () => { clearQueryMedia(); document.getElementById('q').value = t; doSearch(); };
+  chipsEl.appendChild(c);
+});
+
+document.getElementById('q').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { clearQueryMedia(); doSearch(); }
+});
+
+/* ---------- 以媒体搜索（图 / 音 / 视频） ---------- */
+let queryMedia = null;     // data URL 或 null
+let queryMediaKind = null; // 'image' | 'audio' | 'video'
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.onclick = () => fileInput.click();
+fileInput.onchange = () => { if (fileInput.files[0]) loadQueryMedia(fileInput.files[0]); };
+['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+  e.preventDefault(); dropZone.classList.add('over');
+}));
+['dragleave', 'drop'].forEach(ev => dropZone.addEventListener(ev, e => {
+  e.preventDefault(); dropZone.classList.remove('over');
+}));
+dropZone.addEventListener('drop', e => {
+  const f = e.dataTransfer.files[0];
+  if (f && /^(image|audio|video)\//.test(f.type)) loadQueryMedia(f);
+});
+
+function loadQueryMedia(file) {
+  const kind = file.type.startsWith('image/') ? 'image'
+             : file.type.startsWith('audio/') ? 'audio'
+             : file.type.startsWith('video/') ? 'video' : null;
+  if (!kind) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (kind === 'image') {
+      // 用 canvas 压缩到最长边 1024，减小传输体积
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, 1024 / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        queryMedia = canvas.toDataURL('image/jpeg', 0.92);
+        showQueryMedia(kind);
+        doSearch();
+      };
+      img.src = reader.result;
+    } else {
+      queryMedia = reader.result;
+      showQueryMedia(kind);
+      doSearch();
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function showQueryMedia(kind) {
+  queryMediaKind = kind;
+  const isImg = kind === 'image';
+  document.getElementById('queryThumb').style.display = isImg ? '' : 'none';
+  const av = document.getElementById('queryThumbAv');
+  av.style.display = isImg ? 'none' : '';
+  av.textContent = kind === 'audio' ? '🎵' : '🎬';
+  if (isImg) document.getElementById('queryThumb').src = queryMedia;
+  const tips = {
+    image: '将以这张图进行跨模态相似搜索',
+    audio: '将以这段音频进行跨模态相似搜索',
+    video: '将以这段视频进行跨模态相似搜索',
+  };
+  document.getElementById('queryTip').innerHTML = tips[kind] + '<br>点击右侧 × 清除，恢复文字搜索';
+  document.getElementById('queryImageWrap').classList.add('show');
+}
+
+function clearQueryMedia() {
+  queryMedia = null;
+  queryMediaKind = null;
+  fileInput.value = '';
+  document.getElementById('queryImageWrap').classList.remove('show');
+}
+
+/* ---------- 集合（收录目录）管理 ---------- */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadCollections() {
+  try {
+    const r = await fetch('/api/collections');
+    const d = await r.json();
+    const sel = document.getElementById('colSel');
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">全部集合</option>';
+    d.collections.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.slug;
+      const counts = Object.entries(c.counts).map(([m, n]) => `${{image:'图',audio:'音',video:'视',document:'文'}[m]||m}${n}`).join(' ');
+      o.textContent = `${c.name}（${counts}${c.scanning ? ' · 扫描中…' : ''}）`;
+      sel.appendChild(o);
+    });
+    sel.value = prev;
+    const hint = document.getElementById('colHint');
+    if (d.collections.length) {
+      hint.innerHTML = d.collections.map(c =>
+        `<code>${c.root}</code>`).join('　');
+    }
+    loadLabels();
+  } catch (e) { /* 服务未启动时忽略 */ }
+}
+
+/* ---------- 概念标签：命名图片，检索相关图 ---------- */
+async function loadLabels() {
+  const bar = document.getElementById('labelsBar');
+  const col = document.getElementById('colSel').value;
+  try {
+    let labels = [];
+    if (col) {
+      const r = await fetch(`/api/collections/${col}/labels`);
+      const d = await r.json();
+      labels = (d.labels || []).map(l => ({ ...l, slug: col }));
+    } else {
+      const r = await fetch('/api/collections');
+      const d = await r.json();
+      for (const c of d.collections) {
+        const rr = await fetch(`/api/collections/${c.slug}/labels`);
+        const dd = await rr.json();
+        labels.push(...(dd.labels || []).map(l => ({ ...l, slug: c.slug })));
+      }
+    }
+    bar.innerHTML = '';
+    labels.forEach(l => {
+      const chip = document.createElement('span');
+      chip.className = 'lchip';
+      chip.title = `锚点：${l.anchor || '（已删除）'} · 相似度 ≥ ${l.threshold}`;
+      chip.innerHTML = `🏷 ${escapeHtml(l.name)} <b>×${l.count}</b><span class="del" title="删除标签">✕</span>`;
+      chip.onclick = () => {
+        clearQueryMedia();
+        document.getElementById('q').value = l.name;
+        doSearch();
+      };
+      chip.querySelector('.del').onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm(`删除标签「${l.name}」？（只解除关联，不影响图片本身）`)) return;
+        await fetch(`/api/collections/${l.slug}/labels/${l.id}`, { method: 'DELETE' });
+        loadLabels();
+      };
+      bar.appendChild(chip);
+    });
+  } catch (e) { /* 忽略 */ }
+}
+
+async function nameImage(slug, path) {
+  const name = prompt(`给图片命名：\n${path}\n\n这个名称会关联到集合内所有相似图片，之后用该名称即可检索出它们`);
+  if (!name || !name.trim()) return;
+  try {
+    const r = await fetch(`/api/collections/${slug}/labels`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, name: name.trim() }),
+    });
+    const d = await r.json();
+    if (!r.ok) { alert(d.detail || '命名失败'); return; }
+    alert(`已创建标签「${d.name}」，关联 ${d.count} 张图片（相似度 ≥ ${d.threshold}）`);
+    loadLabels();
+  } catch (e) { alert('命名失败: ' + e); }
+}
+
+async function addCollection() {
+  const path = prompt('输入要收录的目录绝对路径，例如 D:\\Documents');
+  if (!path || !path.trim()) return;
+  try {
+    const r = await fetch('/api/collections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path.trim() }),
+    });
+    const d = await r.json();
+    if (!r.ok) { alert(d.detail || '收录失败'); return; }
+    alert(`已收录「${d.name}」，正在后台建立索引…`);
+    await loadCollections();
+    loadStats();
+  } catch (e) { alert('收录失败: ' + e); }
+}
+
+/* ---------- 状态轮询 ---------- */
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats');
+    const s = await r.json();
+    const c = s.counts || {};
+    document.getElementById('stats').textContent =
+      s.ready
+        ? `索引就绪：${s.indexed} 条 · ${s.collections} 个集合`
+          + (c.document ? `（文档 ${c.document}）` : '')
+          + (c.audio ? `（音频 ${c.audio}）` : '')
+          + (c.video ? `（视频 ${c.video}）` : '')
+        : (s.model_ready ? '索引构建中…' : '正在加载模型…');
+    if (!window._colsLoaded || Math.random() < 0.1) { loadCollections(); window._colsLoaded = 1; }
+  } catch (e) { /* 服务未启动时忽略 */ }
+}
+loadStats();
+setInterval(loadStats, 15000);
+
+/* ---------- 搜索（统一走 /v1/search） ---------- */
+let searching = false;
+async function doSearch() {
+  const q = document.getElementById('q').value.trim();
+  if ((!q && !queryMedia) || searching) return;
+  searching = true;
+  const btn = document.getElementById('btn');
+  btn.disabled = true; btn.textContent = '搜索中…';
+  const meta = document.getElementById('meta');
+  const grid = document.getElementById('grid');
+  try {
+    const t0 = performance.now();
+    const col = document.getElementById('colSel').value;
+    const body = { query: queryMedia || q, k: 30 };
+    if (col) body.collection = col;
+    const r = await fetch('/v1/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      const msg = data.error ? data.error.message : '搜索失败，请稍后重试';
+      grid.innerHTML = `<div class="empty">${msg}</div>`;
+      return;
+    }
+    const total = (performance.now() - t0).toFixed(0);
+    const qdesc = { image: '上传的图片', audio: '上传的音频', video: '上传的视频' }[data.query_type]
+      || `「${q}」`;
+    meta.textContent = `${qdesc} · 找到 ${data.count} 条相关结果 · 编码 ${data.encode_ms} ms · 共用时 ${total} ms`;
+    grid.innerHTML = '';
+    if (!data.data.length) {
+      grid.innerHTML = '<div class="empty">没有找到相关结果，换个描述试试</div>';
+      return;
+    }
+    const max = data.data[0].score || 1;
+    const kindTag = { audio: '🎵 ', video: '🎬 ', document: '📄 ' };
+    data.data.forEach((it, i) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.animationDelay = (i * 25) + 'ms';
+      const pct = Math.max(4, Math.round(it.score / max * 100));
+      let mediaHtml;
+      if (it.modality === 'audio') {
+        mediaHtml = `<audio controls preload="none" src="${it.url}" style="width:100%;display:block;background:#111"></audio>`;
+      } else if (it.modality === 'video') {
+        mediaHtml = `<video controls preload="metadata" src="${it.url}" style="width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#111"></video>`;
+      } else if (it.modality === 'document') {
+        mediaHtml = `<div class="doc-thumb">📄</div>`;
+      } else {
+        mediaHtml = `<img loading="lazy" src="${it.url}" alt="${it.label}">`;
+      }
+      card.innerHTML = `
+        ${mediaHtml}
+        <div class="info">
+          <div class="label" title="${it.path}（${it.collection_name}）">${kindTag[it.modality] || ''}${it.label}</div>
+          ${it.modality === 'document' && it.snippet ? `<div class="snip">${it.snippet}</div>` : ''}
+          ${it.matched_label ? `<span class="lb-badge">🏷 标签：${escapeHtml(it.matched_label)}</span>` : ''}
+          <div class="bar"><i style="width:${pct}%"></i></div>
+          <div class="score">相似度 ${it.score.toFixed(3)} · ${it.collection_name || ''}</div>
+        </div>`;
+      if (it.modality === 'image') {
+        const tbtn = document.createElement('button');
+        tbtn.className = 'tag-btn';
+        tbtn.textContent = '🏷 命名';
+        tbtn.title = '给这张图命名，关联所有相似图片';
+        tbtn.onclick = (e) => { e.stopPropagation(); nameImage(it.collection, it.path); };
+        card.querySelector('.info').appendChild(tbtn);
+      }
+      card.title = it.abs || it.path;
+      card.onclick = () => {
+        if (it.modality === 'document') { window.open(it.url, '_blank'); return; }
+        if (it.modality && it.modality !== 'image') return; // 音视频用自带控件播放
+        document.getElementById('lb-img').src = it.url;
+        document.getElementById('lb-cap').textContent = it.label + ' · 相似度 ' + it.score.toFixed(3);
+        document.getElementById('lightbox').classList.add('open');
+      };
+      grid.appendChild(card);
+    });
+  } finally {
+    searching = false;
+    btn.disabled = false; btn.textContent = '搜索';
+  }
+}
+</script>
+</body>
+</html>

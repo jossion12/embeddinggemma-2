@@ -1,0 +1,9 @@
+{
+  "name": "image-semantic-search",
+  "version": "1.0.0",
+  "private": true,
+  "description": "基于 EmbeddingGemma 2 的语义图片搜索（FastAPI 后端 + 静态前端）",
+  "scripts": {
+    "dev": "\".venv\\Scripts\\python.exe\" server.py --port 7100"
+  }
+}

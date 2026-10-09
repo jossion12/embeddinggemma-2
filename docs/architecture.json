@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "EmbeddingGemma-2 本地多模态语义搜索",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1280, 590]
+  },
+  "components": [
+    { "id": "watchdir", "type": "external", "label": "本地目录", "sublabel": "文档 / 图片 / 音频 / 视频", "pos": [50, 50], "size": [160, 66] },
+    { "id": "browser", "type": "frontend", "label": "浏览器前端", "sublabel": "static/index.html · 拖拽检索", "pos": [50, 240], "size": [160, 66] },
+    { "id": "sdk", "type": "external", "label": "OpenAI SDK 客户端", "sublabel": "Python / 任意语言脚本", "pos": [50, 430], "size": [160, 66] },
+    { "id": "autoscan", "type": "backend", "label": "自动扫描线程", "sublabel": "--scan-interval 300s", "pos": [360, 50], "size": [170, 66] },
+    { "id": "server", "type": "backend", "label": "FastAPI 服务", "sublabel": "server.py :7100", "pos": [360, 240], "size": [170, 66] },
+    { "id": "sqlite", "type": "database", "label": "SQLite 元数据", "sublabel": "mtime+size 变更检测", "pos": [700, 240], "size": [180, 66] },
+    { "id": "faiss", "type": "database", "label": "Faiss 向量索引", "sublabel": "IndexFlatIP(256) · 38,323 条", "pos": [1050, 240], "size": [170, 66] },
+    { "id": "model", "type": "backend", "label": "EmbeddingGemma 2", "sublabel": "本地模型 · fp32 · 256 维", "pos": [700, 430], "size": [180, 66] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "本机 127.0.0.1", "wraps": ["browser", "autoscan", "server", "sqlite", "faiss", "model"] }
+  ],
+  "connections": [
+    { "id": "scan-dir", "from": "autoscan", "to": "watchdir", "label": "增量扫描", "variant": "dashed", "fromSide": "left", "toSide": "right" },
+    { "id": "scan-queue", "from": "autoscan", "to": "server", "label": "新 / 改 / 删文件", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 24 },
+    { "id": "browser-search", "from": "browser", "to": "server", "label": "HTTP 搜索 / 收录", "variant": "emphasis", "fromSide": "right", "toSide": "left" },
+    { "id": "sdk-api", "from": "sdk", "to": "server", "label": "OpenAI 兼容 API", "fromSide": "right", "toSide": "left" },
+    { "id": "encode", "from": "server", "to": "model", "label": "四类模态编码 → 256 维", "fromSide": "bottom", "toSide": "top" },
+    { "id": "meta", "from": "server", "to": "sqlite", "label": "元数据 / 变更检测", "fromSide": "right", "toSide": "left" },
+    { "id": "idmap", "from": "sqlite", "to": "faiss", "label": "doc_id 对齐", "variant": "dashed", "fromSide": "right", "toSide": "left" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "检索链路", "items": ["浏览器拖拽查询，OpenAI SDK 调 /v1/search", "38,323 条向量 top-k 检索 <50ms"] },
+    { "dot": "emerald", "title": "编码规格", "items": ["文档 title|text，音频 16kHz 单声道，视频 1fps 抽帧", "统一截断 256 维 MRL，fp32 推理（禁用 fp16）"] },
+    { "dot": "rose", "title": "增量同步", "items": ["mtime+size 变更检测，已收录不重复编码，自动扫描 300s", "索引存 collections/，不污染源目录"] }
+  ]
+}

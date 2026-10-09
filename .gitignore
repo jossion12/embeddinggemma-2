@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# 索引数据（自动生成的向量索引，体积大且可随时重建）
+collections/
+index/
+
+# 数据集（不入库，按各自来源管理）
+img/
+av/
+
+# 临时文件与日志
+tmp_*
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
